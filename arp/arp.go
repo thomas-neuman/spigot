@@ -65,7 +65,11 @@ func (ar *ArpResponder) replyArp(req *layers.ARP) gopacket.Packet {
 	return gopacket.NewPacket(buf.Bytes(), layers.LayerTypeEthernet, gopacket.DecodeOptions{})
 }
 
+// Implement packets.PacketProcessor
 func (ar *ArpResponder) Process(input gopacket.Packet) (output gopacket.Packet, consumed bool) {
+	output = input
+	consumed = false
+
 	arpLayer := input.Layer(layers.LayerTypeARP)
 	if arpLayer != nil {
 		log.Println("ARP message!")
@@ -74,10 +78,8 @@ func (ar *ArpResponder) Process(input gopacket.Packet) (output gopacket.Packet, 
 		log.Println("Rendered ARP reply:", reply)
 
 		ar.frameSnk.NextPacket(reply)
-
-		return reply, true
+		consumed = true
 	}
 
-
-	return nil, false
+	return
 }

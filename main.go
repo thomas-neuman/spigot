@@ -13,6 +13,7 @@ import (
 	. "github.com/thomas-neuman/spigot/port"
 	. "github.com/thomas-neuman/spigot/packets"
 	. "github.com/thomas-neuman/spigot/arp"
+	"github.com/thomas-neuman/spigot/nkn"
 )
 
 
@@ -29,12 +30,14 @@ func main() {
 	}
 
 	frameSrc := PacketSourceFromPort(br0, layers.LayerTypeEthernet)
-	// frameSnk := PacketSinkFromPort(br0, gopacket.SerializeOptions{})
 
 	var procs []PacketProcessor
 
 	arpResp := NewArpResponder(br0)
 	procs = append(procs, arpResp)
+
+	nknClient, err := nkn.NewNknClient()
+	procs = append(procs, nknClient)
 
 	consumed := false
 
@@ -46,13 +49,14 @@ func main() {
 			log.Println("Error:", err)
 		}
 
-		log.Println("Got frame:", frame)
+		// log.Println("Got frame:", frame)
 
 		for _, proc := range procs {
 			frame, consumed = proc.Process(frame)
 			if consumed {
 				break
 			}
+			// log.Println("    --> Intermediate packet:", frame)
 		}
 
 		if !consumed {
