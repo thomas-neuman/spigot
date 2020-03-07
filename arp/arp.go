@@ -1,6 +1,7 @@
 package arp
 
 import (
+	"log"
 	"net"
 
 	"github.com/google/gopacket"
@@ -39,7 +40,7 @@ func NewArpResponder(p *Port) *ArpResponder {
 	return ar
 }
 
-func (ar *ArpResponder) ReplyArp(req *layers.ARP) gopacket.Packet {
+func (ar *ArpResponder) replyArp(req *layers.ARP) gopacket.Packet {
 	eth := ar.ethTmpl
 	arp := ar.arpTmpl
 
@@ -58,4 +59,18 @@ func (ar *ArpResponder) ReplyArp(req *layers.ARP) gopacket.Packet {
 	}, &eth, &arp)
 
 	return gopacket.NewPacket(buf.Bytes(), layers.LayerTypeEthernet, gopacket.DecodeOptions{})
+}
+
+func (ar *ArpResponder) Process(input gopacket.Packet) (output gopacket.Packet, consumed bool) {
+	arpLayer := input.Layer(layers.LayerTypeARP)
+	if arpLayer != nil {
+		log.Println("ARP message!")
+
+		reply := ar.replyArp(arpLayer.(*layers.ARP))
+		log.Println("Rendered ARP reply:", reply)
+
+		return reply, false
+	}
+
+	return nil, false
 }

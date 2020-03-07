@@ -28,9 +28,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	frameSrc := PacketSource(br0, layers.LayerTypeEthernet)
-	frameSnk := PacketSink(br0, gopacket.SerializeOptions{})
+	frameSrc := PacketSourceFromPort(br0, layers.LayerTypeEthernet)
+	frameSnk := PacketSinkFromPort(br0, gopacket.SerializeOptions{})
+
+	var procs []PacketProcessor
+
 	arpResp := NewArpResponder(br0)
+	procs = append(procs, arpResp)
+
+	var reply gopacket.Packet
+	reply = nil
+	consumed := false
 
 	for {
 		frame, err := frameSrc.NextPacket()
@@ -42,14 +50,17 @@ func main() {
 
 		log.Println("Got frame:", frame)
 
-		arpLayer := frame.Layer(layers.LayerTypeARP)
-		if arpLayer != nil {
-			log.Println("ARP message!")
+		for _, proc := range procs {
+			reply, consumed = proc.Process(frame)
+			if reply != nil {
+				frameSnk.NextPacket(reply)
+				consumed = true
+				break
+			}
+		}
 
-			reply := arpResp.ReplyArp(arpLayer.(*layers.ARP))
-			log.Println("Rendered ARP reply:", reply)
-
-			frameSnk.NextPacket(reply)
+		if !consumed {
+			log.Println("Frame was never consumed!")
 		}
 	}
 }
