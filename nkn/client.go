@@ -1,6 +1,7 @@
 package nkn
 
 import (
+	"encoding/hex"
 	"log"
 	"net"
 
@@ -11,17 +12,47 @@ import (
 
 
 type NknClient struct {
-	client *sdk.Client
+	account	*sdk.Account
+	client	*sdk.Client
+	router	*NknRouter
 }
 
-func NewNknClient() (*NknClient, error) {
-	return nil, nil
+func NewNknClient(privateSeed string, localAddr string) (*NknClient, error) {
+	seed, err := hex.DecodeString(privateSeed)
+	if err != nil {
+		return nil, err
+	}
+
+	acc, err := sdk.NewAccount(seed)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := sdk.NewClient(acc, localAddr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Println("Initialized NKN client", client.Address(), ", waiting to connect...")
+	<- client.OnConnect.C
+	log.Println("NKN client connected.")
+
+	rtr := NewNknRouter()
+
+	c := &NknClient{
+		account: acc,
+		client: client,
+		router: rtr,
+	}
+
+	return c, nil
 }
 
 func (c *NknClient) getNknAddress(ip4 net.IPAddr) ([]string, error) {
 	return []string{""}, nil
 }
 
+// Implement packets.PacketProcessor
 func (c *NknClient) Process(input gopacket.Packet) (output gopacket.Packet, consumed bool) {
 	output = input
 	consumed = false

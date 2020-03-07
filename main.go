@@ -36,7 +36,7 @@ func main() {
 	arpResp := NewArpResponder(br0)
 	procs = append(procs, arpResp)
 
-	nknClient, err := nkn.NewNknClient()
+	nknClient, err := nkn.NewNknClient("039e481266e5a05168c1d834a94db512dbc235877f150c5a3cc1e3903672c673", config.IPAddress)
 	procs = append(procs, nknClient)
 
 	consumed := false
