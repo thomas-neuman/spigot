@@ -17,8 +17,16 @@ import (
 
 
 func main() {
-	br0, _ := NewPort("brSpigot0")
-	br0.SetUp("10.0.10.10/24")
+	config, err := GetConfiguration()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	br0, err := NewPort(config.IfaceName)
+	br0.SetUp(config.IPAddress)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	frameSrc := PacketSource(br0, layers.LayerTypeEthernet)
 	frameSnk := PacketSink(br0, gopacket.SerializeOptions{})
