@@ -7,12 +7,14 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 
+	. "github.com/thomas-neuman/spigot/packets"
 	. "github.com/thomas-neuman/spigot/port"
 )
 
 type ArpResponder struct {
 	ethTmpl layers.Ethernet
 	arpTmpl layers.ARP
+	frameSnk PacketSink
 }
 
 func NewArpResponder(p *Port) *ArpResponder {
@@ -36,6 +38,8 @@ func NewArpResponder(p *Port) *ArpResponder {
 		DstHwAddress:      	[]byte{},
 		DstProtAddress:		[]byte{},
 	}
+
+	ar.frameSnk = PacketSinkFromPort(p, gopacket.SerializeOptions{})
 
 	return ar
 }
@@ -69,8 +73,11 @@ func (ar *ArpResponder) Process(input gopacket.Packet) (output gopacket.Packet, 
 		reply := ar.replyArp(arpLayer.(*layers.ARP))
 		log.Println("Rendered ARP reply:", reply)
 
-		return reply, false
+		ar.frameSnk.NextPacket(reply)
+
+		return reply, true
 	}
+
 
 	return nil, false
 }

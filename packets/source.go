@@ -8,11 +8,11 @@ import (
 
 
 type PacketSource interface {
-	NextPacket() gopacket.Packet
+	NextPacket() (gopacket.Packet, error)
 }
 
 func PacketSourceFromPort(p *Port, decoder gopacket.Decoder) *gopacket.PacketSource {
-	return gopacket.NewPacketSource(PacketDataSource(p), decoder)
+	return gopacket.NewPacketSource(PacketDataSourceFromPort(p), decoder)
 }
 
 
@@ -31,7 +31,7 @@ func (src *packetDataSource) ReadPacketData() (data []byte, ci gopacket.CaptureI
 	return
 }
 
-func PacketDataSource(p *Port) gopacket.PacketDataSource {
+func PacketDataSourceFromPort(p *Port) gopacket.PacketDataSource {
 	return &packetDataSource{
 		port: p,
 	}

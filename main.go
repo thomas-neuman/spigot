@@ -5,7 +5,7 @@ import (
 	"log"
 	_ "net"
 
-	"github.com/google/gopacket"
+	_ "github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	_ "github.com/songgao/packets/ethernet"
 	_ "github.com/vishvananda/netlink"
@@ -29,15 +29,13 @@ func main() {
 	}
 
 	frameSrc := PacketSourceFromPort(br0, layers.LayerTypeEthernet)
-	frameSnk := PacketSinkFromPort(br0, gopacket.SerializeOptions{})
+	// frameSnk := PacketSinkFromPort(br0, gopacket.SerializeOptions{})
 
 	var procs []PacketProcessor
 
 	arpResp := NewArpResponder(br0)
 	procs = append(procs, arpResp)
 
-	var reply gopacket.Packet
-	reply = nil
 	consumed := false
 
 	for {
@@ -51,10 +49,8 @@ func main() {
 		log.Println("Got frame:", frame)
 
 		for _, proc := range procs {
-			reply, consumed = proc.Process(frame)
-			if reply != nil {
-				frameSnk.NextPacket(reply)
-				consumed = true
+			frame, consumed = proc.Process(frame)
+			if consumed {
 				break
 			}
 		}
