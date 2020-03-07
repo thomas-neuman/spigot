@@ -7,6 +7,10 @@ import (
 )
 
 
+type PacketSink interface {
+	NextPacket(gopacket.Packet) error
+}
+
 type packetSink struct {
 	buf			gopacket.SerializeBuffer
 	opts		gopacket.SerializeOptions
@@ -23,7 +27,7 @@ func (sink *packetSink) NextPacket(pkt gopacket.Packet) (err error) {
 	return
 }
 
-func PacketSink(p *Port, opts gopacket.SerializeOptions) *packetSink {
+func PacketSinkFromPort(p *Port, opts gopacket.SerializeOptions) *packetSink {
 	buf := gopacket.NewSerializeBuffer()
 	dataSink := &packetDataSink{
 		port: p,

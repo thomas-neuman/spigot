@@ -7,7 +7,11 @@ import (
 )
 
 
-func PacketSource(p *Port, decoder gopacket.Decoder) *gopacket.PacketSource {
+type PacketSource interface {
+	NextPacket() gopacket.Packet
+}
+
+func PacketSourceFromPort(p *Port, decoder gopacket.Decoder) *gopacket.PacketSource {
 	return gopacket.NewPacketSource(PacketDataSource(p), decoder)
 }
 
