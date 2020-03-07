@@ -2,6 +2,7 @@ package port
 
 import (
 	"log"
+	"sync"
 
 	"github.com/songgao/water"
 )
@@ -10,6 +11,8 @@ import (
 type Port struct {
 	Name string
 	Iface *water.Interface
+
+	wLock sync.Locker
 }
 
 
@@ -21,6 +24,9 @@ func (p *Port) Read() (data []byte, len int, err error) {
 }
 
 func (p *Port) Write(data []byte) (len int, err error) {
+	p.wLock.Lock()
+	defer p.wLock.Unlock()
+
 	return p.Iface.Write(data)
 }
 
@@ -28,6 +34,7 @@ func (p *Port) Write(data []byte) (len int, err error) {
 func NewPort(name string) (*Port, error) {
 	p := &Port{
 		Name: name,
+		wLock: &sync.Mutex{},
 	}
 
 	log.Println("Creating TAP...")
