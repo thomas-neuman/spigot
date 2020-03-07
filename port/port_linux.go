@@ -1,6 +1,7 @@
 package port
 
 import (
+	"fmt"
 	"log"
 	"net"
 
@@ -34,6 +35,28 @@ func (p *Port) SetUp(addr string) error {
 		return err
 	}
 	log.Println("TAP address set.")
+
+	return nil
+}
+
+func (p *Port) AdjustMTU(dec uint) error {
+	li, err := netlink.LinkByName(p.Name)
+	if err != nil {
+		return err
+	}
+
+	log.Println("Adjusting MTU by", dec, "bytes...")
+	mtu := li.Attrs().MTU
+	mtu = mtu - int(dec)
+	if mtu <= 0 {
+		return fmt.Errorf("Decrementing MTU resulted in zero frame length!")
+	}
+
+	err = netlink.LinkSetMTU(li, mtu)
+	if err != nil {
+		return err
+	}
+	log.Println("MTU set to", mtu, ".")
 
 	return nil
 }
