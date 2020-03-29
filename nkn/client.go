@@ -2,11 +2,15 @@ package nkn
 
 import (
 	"encoding/hex"
+	"io/ioutil"
 	"log"
+	"strings"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	sdk "github.com/nknorg/nkn-sdk-go"
+
+	. "github.com/thomas-neuman/spigot/config"
 )
 
 
@@ -16,18 +20,23 @@ type NknClient struct {
 	router	*NknRouter
 }
 
-func NewNknClient(privateSeed string, localAddr string) (*NknClient, error) {
-	seed, err := hex.DecodeString(privateSeed)
+func NewNknClient(config *Configuration) (*NknClient, error) {
+	seed, err := ioutil.ReadFile(config.PrivateSeedFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	hexSeed, err := hex.DecodeString(strings.TrimSpace(string(seed)))
 	if err != nil {
 		return nil, err
 	}
 
-	acc, err := sdk.NewAccount(seed)
+	acc, err := sdk.NewAccount(hexSeed)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := sdk.NewClient(acc, localAddr, nil)
+	client, err := sdk.NewClient(acc, config.IPAddress, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +45,10 @@ func NewNknClient(privateSeed string, localAddr string) (*NknClient, error) {
 	<- client.OnConnect.C
 	log.Println("NKN client connected.")
 
-	rtr := NewNknRouter()
+	rtr, err := NewNknRouter(config)
+	if err != nil {
+		return nil, err
+	}
 
 	c := &NknClient{
 		account: acc,
