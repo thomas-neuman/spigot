@@ -18,6 +18,7 @@ type NknClient struct {
 	account	*sdk.Account
 	client	*sdk.Client
 	router	*NknRouter
+	msgConf	*sdk.MessageConfig
 }
 
 func NewNknClient(config *Configuration) (*NknClient, error) {
@@ -50,10 +51,15 @@ func NewNknClient(config *Configuration) (*NknClient, error) {
 		return nil, err
 	}
 
+	conf := &sdk.MessageConfig{
+		NoReply:	true,
+	}
+
 	c := &NknClient{
-		account: acc,
-		client: client,
-		router: rtr,
+		account:	acc,
+		client:		client,
+		router: 	rtr,
+		msgConf:	conf,
 	}
 
 	return c, nil
@@ -78,15 +84,12 @@ func (c *NknClient) Process(input gopacket.Packet) (output gopacket.Packet, cons
 
 		log.Println("Got destination(s):", dests)
 
-		/*
-		err = c.client.Send(dests, input.Data())
+		_, err = c.client.Send(dests, input.Data(), c.msgConf)
 		if err != nil {
 			log.Println("Failed to send NKN message!")
 			return
 		}
-		*/
 
-		log.Println("NKN consumed the packet! :-)")
 		consumed = true
 	}
 

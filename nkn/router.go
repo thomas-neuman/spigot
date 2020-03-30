@@ -5,6 +5,8 @@ import (
 	"net"
 	"sync"
 
+	sdk "github.com/nknorg/nkn-sdk-go"
+
 	. "github.com/thomas-neuman/spigot/config"
 )
 
@@ -67,7 +69,7 @@ func (r *NknRouter) RemoveRoute(ipAddr string, nknAddr string) error {
 	return nil
 }
 
-func (r *NknRouter) RouteTo(ipAddr string) (nknAddr []string, err error) {
+func (r *NknRouter) RouteTo(ipAddr string) (dests *sdk.StringArray, err error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -76,5 +78,10 @@ func (r *NknRouter) RouteTo(ipAddr string) (nknAddr []string, err error) {
 		return nil, fmt.Errorf("Cannot remove route for invalid IP address %v", ipAddr)
 	}
 
-	return nil, fmt.Errorf("No route known for %v", ipAddr)
+	addrs, ok := r.ipToNknMap[ipAddr]
+	if !ok {
+		return nil, fmt.Errorf("No route known for %v", ipAddr)
+	}
+
+	return sdk.NewStringArray(addrs), nil
 }
