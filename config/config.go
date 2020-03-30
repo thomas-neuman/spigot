@@ -14,10 +14,10 @@ type StaticRouteConfiguration struct {
 }
 
 type Configuration struct {
-	IPAddress string `json:"ip_address" default:"10.0.0.1/24"`
-	IfaceName string `json:"interface_name" default:"spig0"`
-	PrivateSeedFile	string	`json:"private_seed_file" default:"/etc/spigot/secrets/seed"`
-	AuthorizedKeys	[]string	`json:"authorized_keys"`
+	IPAddress string 							`json:"ip_address" default:"10.0.0.1/24"`
+	IfaceName string 							`json:"interface_name" default:"spig0"`
+	PrivateSeedFile	string						`json:"private_seed_file" default:"/etc/spigot/secrets/seed"`
+	AuthorizedKeys	[]string					`json:"authorized_keys"`
 	StaticRoutes	[]StaticRouteConfiguration	`json:"static_routes"`
 }
 
