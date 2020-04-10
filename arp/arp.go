@@ -1,6 +1,7 @@
 package arp
 
 import (
+	"context"
 	"log"
 	"net"
 
@@ -12,9 +13,11 @@ import (
 )
 
 type ArpResponder struct {
-	ethTmpl layers.Ethernet
-	arpTmpl layers.ARP
+	ethTmpl  layers.Ethernet
+	arpTmpl  layers.ARP
 	frameSnk PacketSink
+	replies  chan []byte
+	context  context.Context
 }
 
 func NewArpResponder(p *Port) *ArpResponder {
@@ -28,18 +31,18 @@ func NewArpResponder(p *Port) *ArpResponder {
 		EthernetType: layers.EthernetTypeARP,
 	}
 	ar.arpTmpl = layers.ARP{
-		AddrType:          	layers.LinkTypeEthernet,
-		Protocol:          	layers.EthernetTypeIPv4,
-		HwAddressSize:     	6,
-		ProtAddressSize:   	4,
-		Operation:         	layers.ARPReply,
-		SourceHwAddress:  	[]byte(src),
-		SourceProtAddress: 	[]byte{},
-		DstHwAddress:      	[]byte{},
-		DstProtAddress:		[]byte{},
+		AddrType:          layers.LinkTypeEthernet,
+		Protocol:          layers.EthernetTypeIPv4,
+		HwAddressSize:     6,
+		ProtAddressSize:   4,
+		Operation:         layers.ARPReply,
+		SourceHwAddress:   []byte(src),
+		SourceProtAddress: []byte{},
+		DstHwAddress:      []byte{},
+		DstProtAddress:    []byte{},
 	}
 
-	ar.frameSnk = PacketSinkFromPort(p, gopacket.SerializeOptions{})
+	ar.frameSnk = p.PacketSink(gopacket.SerializeOptions{})
 
 	return ar
 }
@@ -54,19 +57,33 @@ func (ar *ArpResponder) replyArp(req *layers.ARP) gopacket.Packet {
 	arp.DstHwAddress = req.SourceHwAddress
 	arp.DstProtAddress = req.SourceProtAddress
 
-	eth.Payload = arp.LayerContents()
+	// eth.Payload = arp.LayerContents()
 
 	buf := gopacket.NewSerializeBuffer()
 	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{
 		ComputeChecksums: true,
-		FixLengths: true,
-	}, &eth, &arp)
+		FixLengths:       true,
+	},
+		&eth,
+		&arp)
 
+	// ar.replies <- buf.Bytes()
 	return gopacket.NewPacket(buf.Bytes(), layers.LayerTypeEthernet, gopacket.DecodeOptions{})
 }
 
+func (ar *ArpResponder) Egress() *arpResponderEgress {
+	return &arpResponderEgress{
+		a: ar,
+	}
+}
+
+type arpResponderEgress struct {
+	a *ArpResponder
+}
+
 // Implement packets.PacketProcessor
-func (ar *ArpResponder) Process(input gopacket.Packet) (output gopacket.Packet, consumed bool) {
+func (a *arpResponderEgress) Process(input gopacket.Packet) (output gopacket.Packet, consumed bool) {
+	ar := a.a
 	output = input
 	consumed = false
 
@@ -75,11 +92,39 @@ func (ar *ArpResponder) Process(input gopacket.Packet) (output gopacket.Packet, 
 		log.Println("ARP message!")
 
 		reply := ar.replyArp(arpLayer.(*layers.ARP))
-		log.Println("Rendered ARP reply:", reply)
+		consumed = true
 
 		ar.frameSnk.NextPacket(reply)
-		consumed = true
 	}
 
 	return
+}
+
+type arpResponderPacketDataSource struct {
+	a *ArpResponder
+}
+
+// Implements gopacket.PacketDataSource
+func (src *arpResponderPacketDataSource) ReadPacketData() (data []byte, ci gopacket.CaptureInfo, err error) {
+	var msg []byte
+	done := src.a.context.Done()
+
+	select {
+	case msg = <-src.a.replies:
+		n := len(msg)
+		ci.Length = n
+		ci.CaptureLength = n
+
+		data = msg
+		return
+	case <-done:
+		return
+	}
+}
+
+func (a *ArpResponder) PacketSource(dec gopacket.Decoder) *gopacket.PacketSource {
+	src := &arpResponderPacketDataSource{
+		a: a,
+	}
+	return gopacket.NewPacketSource(src, dec)
 }

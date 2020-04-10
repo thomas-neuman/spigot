@@ -1,24 +1,58 @@
 package main
 
 import (
-	"io"
+	"context"
 	"log"
 	_ "net"
+	"os"
+	"os/signal"
+	"syscall"
 
-	_ "github.com/google/gopacket"
+	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	_ "github.com/songgao/packets/ethernet"
 	_ "github.com/vishvananda/netlink"
 
-	. "github.com/thomas-neuman/spigot/port"
-	. "github.com/thomas-neuman/spigot/packets"
 	. "github.com/thomas-neuman/spigot/arp"
-	"github.com/thomas-neuman/spigot/nkn"
 	"github.com/thomas-neuman/spigot/config"
+	"github.com/thomas-neuman/spigot/nkn"
+	. "github.com/thomas-neuman/spigot/packets"
+	. "github.com/thomas-neuman/spigot/port"
 )
 
+func processingLoop(ctxt context.Context, src *gopacket.PacketSource, procs ...PacketProcessor) {
+	var p gopacket.Packet
+
+	for {
+		select {
+		case p = <-src.Packets():
+			// log.Println("Got frame:", p)
+			go func(pkt gopacket.Packet) {
+				consumed := false
+
+				for _, proc := range procs {
+					pkt, consumed = proc.Process(pkt)
+					if consumed {
+						return
+					}
+					// log.Println("    --> Intermediate packet:", frame)
+				}
+
+				if !consumed {
+					log.Println("Frame was never consumed!")
+				}
+			}(p)
+		case <-ctxt.Done():
+			return
+		}
+	}
+}
 
 func main() {
+	ctxt := context.Background()
+	ctxt, cancel := context.WithCancel(ctxt)
+	defer cancel()
+
 	config, err := config.GetConfiguration()
 	if err != nil {
 		log.Fatal(err)
@@ -30,42 +64,32 @@ func main() {
 		log.Fatal(err)
 	}
 
-	frameSrc := PacketSourceFromPort(br0, layers.LayerTypeEthernet)
-
-	var procs []PacketProcessor
+	// frameSrc := PacketSourceFromPort(br0, layers.LayerTypeEthernet)
+	// portSrc := br0.PacketSource(layers.LayerTypeEthernet)
 
 	arpResp := NewArpResponder(br0)
-	procs = append(procs, arpResp)
 
-
-	nknClient, err := nkn.NewNknClient(config)
+	nknClient, err := nkn.NewNknClient(config, br0, ctxt)
 	if err != nil {
 		log.Fatal(err)
 	}
-	procs = append(procs, nknClient)
 
-	consumed := false
+	go processingLoop(ctxt,
+		br0.PacketSource(layers.LayerTypeEthernet),
+		arpResp.Egress(),
+		nknClient.Egress())
+	go processingLoop(ctxt,
+		nknClient.PacketSource(layers.LayerTypeEthernet),
+		br0.Ingress())
 
-	for {
-		frame, err := frameSrc.NextPacket()
-		if err == io.EOF {
-			log.Fatal("Interface closed!")
-		} else if err != nil {
-			log.Println("Error:", err)
-		}
+	c := make(chan os.Signal, 1)
+	signal.Notify(c,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
 
-		// log.Println("Got frame:", frame)
-
-		for _, proc := range procs {
-			frame, consumed = proc.Process(frame)
-			if consumed {
-				break
-			}
-			// log.Println("    --> Intermediate packet:", frame)
-		}
-
-		if !consumed {
-			log.Println("Frame was never consumed!")
-		}
-	}
+	// Block until a signal is received.
+	s := <-c
+	log.Println("Caught signal", s)
 }
