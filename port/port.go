@@ -43,18 +43,7 @@ type PortIngress struct {
 }
 
 // Implement packets.PacketProcessor
-func (p *PortIngress) Process(input gopacket.Packet) (output gopacket.Packet, consumed bool) {
-	output = input
-	consumed = false
-
-	/*
-		// eth := input.Layer(layers.LayerTypeEthernet)
-		el := input.Layer(layers.LayerTypeEthernet).(*layers.Ethernet)
-		el.DstMAC = p.p.HardwareAddr()
-		// el.SrcMAC = p.p.HardwareAddr()
-		el.Length = uint16(len(el.LayerContents()) + len(el.LayerPayload()))
-	*/
-
+func (p *PortIngress) Process(input *layers.IPv4) error {
 	eth := layers.Ethernet{
 		SrcMAC:       p.p.HardwareAddr(),
 		DstMAC:       p.p.HardwareAddr(),
@@ -66,61 +55,20 @@ func (p *PortIngress) Process(input gopacket.Packet) (output gopacket.Packet, co
 	// eth.Payload = ip4.Data()
 
 	// ip4 := input.Layer(layers.LayerTypeIPv4).(*layers.IPv4)
-	if ip4 == nil {
-		return
-	}
-
-	// ip4.Payload = ip4.LayerPayload()
-	var ls []gopacket.SerializableLayer
-	ls = append(ls, &eth)
-	for _, l := range ip4.Layers() {
-		ls = append(ls, l.(gopacket.SerializableLayer))
-	}
 
 	buf := gopacket.NewSerializeBuffer()
 	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{
 		ComputeChecksums: true,
 		FixLengths:       true,
 	},
-		ls...)
+		&eth,
+		ip4)
 
-	/*
-		_, err := p.p.Write(input.Data())
-		if err != nil {
-			log.Println("Error writing to Port:", err)
-			return
-		}
-
-		log.Println("Written!")
-	*/
 	pkt := gopacket.NewPacket(buf.Bytes(), layers.LayerTypeEthernet, gopacket.DecodeOptions{})
 	log.Println("Writing packet:", pkt)
 	p.p.PacketSink(gopacket.SerializeOptions{}).NextPacket(pkt)
 
-	consumed = true
-	return
-}
-
-type portPacketDataSource struct {
-	p *Port
-}
-
-// Implements gopacket.PacketDataSource
-func (src *portPacketDataSource) ReadPacketData() (data []byte, ci gopacket.CaptureInfo, err error) {
-	data, n, err := src.p.Read()
-
-	ci.Length = n
-	ci.CaptureLength = n
-	data = data[:n]
-
-	return
-}
-
-func (p *Port) PacketSource(dec gopacket.Decoder) *gopacket.PacketSource {
-	src := &portPacketDataSource{
-		p: p,
-	}
-	return gopacket.NewPacketSource(src, dec)
+	return nil
 }
 
 type portPacketDataSink struct {

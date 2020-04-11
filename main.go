@@ -55,13 +55,50 @@ func NewSpigotDaemon(ctxt context.Context, conf *config.Configuration) *SpigotDa
 
 func (d *SpigotDaemon) Start() {
 	go d.egressLoop()
+	go d.ingressLoop()
+}
+
+func (d *SpigotDaemon) ingressLoop() {
+	var ip4 layers.IPv4
+	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4)
+	parser.IgnoreUnsupported = true
+	dec := []gopacket.LayerType{}
+
+	var b []byte
+	var err error
+	for {
+		select {
+		case <-d.ctxt.Done():
+			return
+		default:
+			b, _, err = d.nknClient.Read()
+			if err != nil {
+				log.Println("Error reading packet data")
+				continue
+			}
+
+			err = parser.DecodeLayers(b, &dec)
+			if err != nil {
+				log.Println("Error decoding egress packet:", err)
+				continue
+			}
+
+			for _, lt := range dec {
+				switch lt {
+				case layers.LayerTypeIPv4:
+					d.port.Ingress().Process(&ip4)
+				}
+			}
+		}
+	}
 }
 
 func (d *SpigotDaemon) egressLoop() {
 	var eth layers.Ethernet
 	var arp layers.ARP
 	var ip4 layers.IPv4
-	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &arp, &ip4)
+	var rest gopacket.Payload
+	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &arp, &ip4, &rest)
 	parser.IgnoreUnsupported = true
 	dec := []gopacket.LayerType{}
 

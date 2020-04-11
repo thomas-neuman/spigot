@@ -73,38 +73,38 @@ func NewNknClient(config *Configuration, port *Port, ctxt context.Context) (*Nkn
 	return c, nil
 }
 
-type nknClientPacketDataSource struct {
-	c *NknClient
-}
-
-// Implements gopacket.PacketDataSource
-func (src *nknClientPacketDataSource) ReadPacketData() (data []byte, ci gopacket.CaptureInfo, err error) {
-	om := src.c.client.OnMessage.C
-	done := src.c.context.Done()
+func (c *NknClient) Start() {
+	om := c.client.OnMessage.C
+	done := c.context.Done()
 
 	var msg *sdk.Message
 
-	select {
-	case msg = <-om:
-		log.Printf("Got message: %v", msg)
+	for {
+		select {
+		case msg = <-om:
+			log.Printf("Got message: %v", msg)
 
-		data = msg.Data
-
-		n := len(data)
-		ci.Length = n
-		ci.CaptureLength = n
-		err = nil
-		return
-	case <-done:
-		return
+			// c.snk.NextPacket(msg.Data)
+		case <-done:
+			return
+		}
 	}
 }
 
-func (c *NknClient) PacketSource(dec gopacket.Decoder) *gopacket.PacketSource {
-	src := &nknClientPacketDataSource{
-		c: c,
+func (c *NknClient) Read() (data []byte, n int, err error) {
+	select {
+	case msg := <-c.client.OnMessage.C:
+		log.Printf("Got message: %v", msg)
+
+		data = msg.Data
+		n = len(data)
+		err = nil
+
+		return
+	case <-c.context.Done():
+		err = errors.New("Done!")
+		return
 	}
-	return gopacket.NewPacketSource(src, dec)
 }
 
 func (c *NknClient) Egress() *nknClientEgress {
@@ -140,6 +140,15 @@ func (ce *nknClientEgress) Process(input *layers.IPv4) error {
 	log.Println("Got destination(s):", dests)
 
 	input.SerializeTo(ce.buf, ce.opts)
+	gopacket.SerializeLayers(ce.buf, ce.opts, input)
+	b, err := ce.buf.AppendBytes(len(input.LayerPayload()))
+	if err != nil {
+		log.Println("Allocation issue")
+		return errors.New("Yeah")
+	}
+	copy(b, input.LayerPayload())
+
+	log.Println("Sending", ce.buf.Bytes())
 	_, err = c.client.Send(dests, ce.buf.Bytes(), c.msgConf)
 	if err != nil {
 		log.Println("Failed to send NKN message!")
