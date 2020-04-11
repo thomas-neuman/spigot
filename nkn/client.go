@@ -140,13 +140,7 @@ func (ce *nknClientEgress) Process(input *layers.IPv4) error {
 	log.Println("Got destination(s):", dests)
 
 	input.SerializeTo(ce.buf, ce.opts)
-	gopacket.SerializeLayers(ce.buf, ce.opts, input)
-	b, err := ce.buf.AppendBytes(len(input.LayerPayload()))
-	if err != nil {
-		log.Println("Allocation issue")
-		return errors.New("Yeah")
-	}
-	copy(b, input.LayerPayload())
+	gopacket.SerializeLayers(ce.buf, ce.opts, input, gopacket.Payload(input.LayerPayload()))
 
 	log.Println("Sending", ce.buf.Bytes())
 	_, err = c.client.Send(dests, ce.buf.Bytes(), c.msgConf)

@@ -60,7 +60,8 @@ func (d *SpigotDaemon) Start() {
 
 func (d *SpigotDaemon) ingressLoop() {
 	var ip4 layers.IPv4
-	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4)
+	var rest gopacket.Payload
+	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4, &rest)
 	parser.IgnoreUnsupported = true
 	dec := []gopacket.LayerType{}
 

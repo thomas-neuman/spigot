@@ -50,22 +50,17 @@ func (p *PortIngress) Process(input *layers.IPv4) error {
 		EthernetType: layers.EthernetTypeIPv4,
 	}
 
-	// ip4 := gopacket.NewPacket(input.Layer(layers.LayerTypeEthernet).LayerPayload(), layers.LayerTypeIPv4, gopacket.DecodeOptions{})
-	ip4 := input
-	// eth.Payload = ip4.Data()
-
-	// ip4 := input.Layer(layers.LayerTypeIPv4).(*layers.IPv4)
-
 	buf := gopacket.NewSerializeBuffer()
 	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{
 		ComputeChecksums: true,
 		FixLengths:       true,
 	},
 		&eth,
-		ip4)
+		input,
+		gopacket.Payload(input.LayerPayload()))
 
 	pkt := gopacket.NewPacket(buf.Bytes(), layers.LayerTypeEthernet, gopacket.DecodeOptions{})
-	log.Println("Writing packet:", pkt)
+	log.Println("Writing packet:", pkt, " (", buf, ")")
 	p.p.PacketSink(gopacket.SerializeOptions{}).NextPacket(pkt)
 
 	return nil
