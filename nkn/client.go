@@ -137,7 +137,7 @@ func (ce *nknClientEgress) Process(input gopacket.Packet) (output gopacket.Packe
 
 		log.Println("Got destination(s):", dests)
 
-		_, err = c.client.Send(dests, input.Data(), c.msgConf)
+		_, err = c.client.Send(dests, input.LinkLayer().LayerPayload(), c.msgConf)
 		if err != nil {
 			log.Println("Failed to send NKN message!")
 			return
