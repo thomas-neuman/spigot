@@ -9,127 +9,114 @@ import (
 	"syscall"
 
 	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	_ "github.com/songgao/packets/ethernet"
-	_ "github.com/vishvananda/netlink"
 
-	. "github.com/thomas-neuman/spigot/arp"
+	"github.com/thomas-neuman/spigot/arp"
 	"github.com/thomas-neuman/spigot/config"
+	"github.com/thomas-neuman/spigot/handler"
 	"github.com/thomas-neuman/spigot/nkn"
-	_ "github.com/thomas-neuman/spigot/packets"
-	. "github.com/thomas-neuman/spigot/port"
+	"github.com/thomas-neuman/spigot/port"
 )
 
 type SpigotDaemon struct {
 	ctxt      context.Context
-	port      *Port
-	arpResp   *ArpResponder
-	nknClient *nkn.NknClient
-
-	ingressInput chan []byte
-	egressInput  chan []byte
+	port      handler.LayerHandler
+	arpResp   handler.LayerHandler
+	nknClient handler.LayerHandler
 }
 
 func NewSpigotDaemon(ctxt context.Context, conf *config.Configuration) *SpigotDaemon {
-	br0, err := NewPort(conf.IfaceName)
-	br0.SetUp(conf.IPAddress)
+	br0, err := port.NewPort(conf)
+	br0.SetUp()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	arpResp := NewArpResponder(br0)
+	arpResp := arp.NewArpResponder()
 
-	nknClient, err := nkn.NewNknClient(conf, br0, ctxt)
+	nknClient, err := nkn.NewNknClient(conf)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	daemon := &SpigotDaemon{
 		ctxt:      ctxt,
-		port:      br0,
-		arpResp:   arpResp,
-		nknClient: nknClient,
+		port:      handler.NewLayerHandler(br0, ctxt),
+		arpResp:   handler.NewLayerHandler(arpResp, ctxt),
+		nknClient: handler.NewLayerHandler(nknClient, ctxt),
 	}
 	return daemon
 }
 
 func (d *SpigotDaemon) Start() {
+	d.arpResp.Start()
+	d.nknClient.Start()
+	d.port.Start()
+
 	go d.egressLoop()
 	go d.ingressLoop()
 }
 
 func (d *SpigotDaemon) ingressLoop() {
-	var ip4 layers.IPv4
-	var rest gopacket.Payload
-	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4, &rest)
-	parser.IgnoreUnsupported = true
-	dec := []gopacket.LayerType{}
-
-	var b []byte
+	var ls []gopacket.SerializableLayer
 	var err error
+
 	for {
 		select {
 		case <-d.ctxt.Done():
 			return
 		default:
-			b, _, err = d.nknClient.Read()
+			ls, err = d.nknClient.Read()
 			if err != nil {
 				log.Println("Error reading packet data")
 				continue
 			}
 
-			err = parser.DecodeLayers(b, &dec)
-			if err != nil {
-				log.Println("Error decoding egress packet:", err)
-				continue
-			}
-
-			for _, lt := range dec {
-				switch lt {
-				case layers.LayerTypeIPv4:
-					d.port.Ingress().Process(&ip4)
-				}
-			}
+			d.port.Write(ls)
 		}
 	}
 }
 
 func (d *SpigotDaemon) egressLoop() {
-	var eth layers.Ethernet
-	var arp layers.ARP
-	var ip4 layers.IPv4
-	var rest gopacket.Payload
-	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &arp, &ip4, &rest)
-	parser.IgnoreUnsupported = true
-	dec := []gopacket.LayerType{}
-
-	var b []byte
+	var ls []gopacket.SerializableLayer
 	var err error
+
 	for {
 		select {
 		case <-d.ctxt.Done():
 			return
 		default:
-			b, _, err = d.port.Read()
+			ls, err = d.port.Read()
 			if err != nil {
 				log.Println("Error reading packet data")
 				continue
 			}
 
-			err = parser.DecodeLayers(b, &dec)
-			if err != nil {
-				log.Println("Error decoding egress packet:", err)
-				continue
-			}
-
-			for _, lt := range dec {
-				switch lt {
-				case layers.LayerTypeEthernet:
+			for i, l := range ls {
+				switch l.LayerType() {
+				case d.port.FirstLayerType():
 					continue
-				case layers.LayerTypeARP:
-					err = d.arpResp.Egress().Process(&arp)
-				case layers.LayerTypeIPv4:
-					d.nknClient.Egress().Process(&ip4)
+				case d.arpResp.FirstLayerType():
+					err = d.arpResp.Write(ls[i:])
+					if err != nil {
+						log.Println("Error writing ARP packet to ArpResponder:", err)
+						continue
+					}
+
+					reply, err := d.arpResp.Read()
+					if err != nil {
+						log.Println("Error reading ARP packet from ArpResponder:", err)
+						continue
+					}
+
+					err = d.port.Write(reply)
+					if err != nil {
+						log.Println("Error writing ARP back to port:", err)
+					}
+				case d.nknClient.FirstLayerType():
+					err = d.nknClient.Write(ls[i:])
+					if err != nil {
+						log.Println("Error writing packet to NknClient:", err)
+					}
 				}
 			}
 		}

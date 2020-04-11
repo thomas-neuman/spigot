@@ -8,19 +8,17 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-
 func (p *Port) SetDown() error {
 	return nil
 }
 
-func (p *Port) SetUp(addr string) error {
-	cidr, err := netlink.ParseAddr(addr)
+func (p *Port) SetUp() error {
+	cidr, err := netlink.ParseAddr(p.conf.IPAddress)
 	if err != nil {
 		return err
 	}
-	// p.Cidr = *cidr
 
-	li, err := netlink.LinkByName(p.Name)
+	li, err := netlink.LinkByName(p.conf.IfaceName)
 	if err != nil {
 		return err
 	}
@@ -40,7 +38,7 @@ func (p *Port) SetUp(addr string) error {
 }
 
 func (p *Port) AdjustMTU(dec uint) error {
-	li, err := netlink.LinkByName(p.Name)
+	li, err := netlink.LinkByName(p.conf.IfaceName)
 	if err != nil {
 		return err
 	}
@@ -62,6 +60,6 @@ func (p *Port) AdjustMTU(dec uint) error {
 }
 
 func (p *Port) HardwareAddr() net.HardwareAddr {
-	l, _ := netlink.LinkByName(p.Name)
+	l, _ := netlink.LinkByName(p.conf.IfaceName)
 	return l.Attrs().HardwareAddr
 }

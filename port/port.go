@@ -2,100 +2,81 @@ package port
 
 import (
 	"log"
-	"sync"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/songgao/water"
 
-	"github.com/thomas-neuman/spigot/packets"
+	"github.com/thomas-neuman/spigot/config"
 )
 
 type Port struct {
-	Name  string
-	Iface *water.Interface
-
-	wLock sync.Locker
+	conf   *config.Configuration
+	iface  *water.Interface
+	inbuf  []byte
+	outbuf gopacket.SerializeBuffer
+	opts   gopacket.SerializeOptions
 }
 
-func (p *Port) Read() (data []byte, len int, err error) {
-	data = make([]byte, 1500)
-	len, err = p.Iface.Read(data)
-
-	return
+func (p *Port) FirstLayerType() gopacket.LayerType {
+	return layers.LayerTypeEthernet
 }
 
-func (p *Port) Write(data []byte) (len int, err error) {
-	p.wLock.Lock()
-	defer p.wLock.Unlock()
+func (p *Port) DoInit() error {
+	p.inbuf = make([]byte, 1500)
 
-	return p.Iface.Write(data)
-}
-
-func (p *Port) Ingress() *PortIngress {
-	return &PortIngress{
-		p: p,
-	}
-}
-
-type PortIngress struct {
-	p *Port
-}
-
-// Implement packets.PacketProcessor
-func (p *PortIngress) Process(input *layers.IPv4) error {
-	eth := layers.Ethernet{
-		SrcMAC:       p.p.HardwareAddr(),
-		DstMAC:       p.p.HardwareAddr(),
-		EthernetType: layers.EthernetTypeIPv4,
-	}
-
-	buf := gopacket.NewSerializeBuffer()
-	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{
+	p.outbuf = gopacket.NewSerializeBuffer()
+	p.opts = gopacket.SerializeOptions{
 		ComputeChecksums: true,
 		FixLengths:       true,
-	},
-		&eth,
-		input,
-		gopacket.Payload(input.LayerPayload()))
-
-	pkt := gopacket.NewPacket(buf.Bytes(), layers.LayerTypeEthernet, gopacket.DecodeOptions{})
-	p.p.PacketSink(gopacket.SerializeOptions{}).NextPacket(pkt)
-
+	}
 	return nil
 }
 
-type portPacketDataSink struct {
-	p *Port
+func (p *Port) DoRead() (data []gopacket.SerializableLayer, err error) {
+	_, err = p.iface.Read(p.inbuf)
+	if err != nil {
+		return
+	}
+
+	pkt := gopacket.NewPacket(p.inbuf, p.FirstLayerType(), gopacket.DecodeOptions{})
+	for _, l := range pkt.Layers() {
+		data = append(data, l.(gopacket.SerializableLayer))
+	}
+	return
 }
 
-func (snk *portPacketDataSink) WritePacketData(buf gopacket.SerializeBuffer) (n int, err error) {
-	return snk.p.Write(buf.Bytes())
+func (p *Port) DoWrite(data []gopacket.SerializableLayer) (err error) {
+	eth := data[0].(*layers.Ethernet)
+	eth.SrcMAC = p.HardwareAddr()
+	eth.DstMAC = p.HardwareAddr()
+
+	gopacket.SerializeLayers(p.outbuf, p.opts, data...)
+
+	_, err = p.iface.Write(p.outbuf.Bytes())
+	if err != nil {
+		log.Println("Error writing packet to interface:", err)
+	}
+
+	return err
 }
 
-func (p *Port) PacketSink(opts gopacket.SerializeOptions) packets.PacketSink {
-	return packets.NewPacketSink(&portPacketDataSink{
-		p: p,
-	}, opts)
-}
-
-func NewPort(name string) (*Port, error) {
+func NewPort(conf *config.Configuration) (*Port, error) {
 	p := &Port{
-		Name:  name,
-		wLock: &sync.Mutex{},
+		conf: conf,
 	}
 
 	log.Println("Creating TAP...")
-	config := water.Config{
+	ifaceConfig := water.Config{
 		DeviceType: water.TAP,
 	}
-	config.Name = p.Name
+	ifaceConfig.Name = conf.IfaceName
 
-	iface, err := water.New(config)
+	iface, err := water.New(ifaceConfig)
 	if err != nil {
 		return nil, err
 	}
-	p.Iface = iface
+	p.iface = iface
 
 	return p, nil
 }
