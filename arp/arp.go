@@ -67,7 +67,6 @@ func (ar *ArpResponder) replyArp(req *layers.ARP) gopacket.Packet {
 		&eth,
 		&arp)
 
-	// ar.replies <- buf.Bytes()
 	return gopacket.NewPacket(buf.Bytes(), layers.LayerTypeEthernet, gopacket.DecodeOptions{})
 }
 
@@ -81,50 +80,13 @@ type arpResponderEgress struct {
 	a *ArpResponder
 }
 
-// Implement packets.PacketProcessor
-func (a *arpResponderEgress) Process(input gopacket.Packet) (output gopacket.Packet, consumed bool) {
+func (a *arpResponderEgress) Process(input *layers.ARP) error {
 	ar := a.a
-	output = input
-	consumed = false
 
-	arpLayer := input.Layer(layers.LayerTypeARP)
-	if arpLayer != nil {
-		log.Println("ARP message!")
+	reply := ar.replyArp(input)
+	ar.frameSnk.NextPacket(reply)
 
-		reply := ar.replyArp(arpLayer.(*layers.ARP))
-		consumed = true
+	log.Println("Responding to ARP")
 
-		ar.frameSnk.NextPacket(reply)
-	}
-
-	return
-}
-
-type arpResponderPacketDataSource struct {
-	a *ArpResponder
-}
-
-// Implements gopacket.PacketDataSource
-func (src *arpResponderPacketDataSource) ReadPacketData() (data []byte, ci gopacket.CaptureInfo, err error) {
-	var msg []byte
-	done := src.a.context.Done()
-
-	select {
-	case msg = <-src.a.replies:
-		n := len(msg)
-		ci.Length = n
-		ci.CaptureLength = n
-
-		data = msg
-		return
-	case <-done:
-		return
-	}
-}
-
-func (a *ArpResponder) PacketSource(dec gopacket.Decoder) *gopacket.PacketSource {
-	src := &arpResponderPacketDataSource{
-		a: a,
-	}
-	return gopacket.NewPacketSource(src, dec)
+	return nil
 }

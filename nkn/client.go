@@ -3,9 +3,11 @@ package nkn
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"io/ioutil"
 	"log"
 	"strings"
+	"sync"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -112,39 +114,39 @@ func (c *NknClient) Egress() *nknClientEgress {
 }
 
 type nknClientEgress struct {
-	c *NknClient
+	c       *NknClient
+	buf     gopacket.SerializeBuffer
+	opts    gopacket.SerializeOptions
+	bufInit sync.Once
 }
 
 // Implement packets.PacketProcessor
-func (ce *nknClientEgress) Process(input gopacket.Packet) (output gopacket.Packet, consumed bool) {
+func (ce *nknClientEgress) Process(input *layers.IPv4) error {
+	ce.bufInit.Do(func() {
+		ce.buf = gopacket.NewSerializeBuffer()
+		ce.opts = gopacket.SerializeOptions{
+			FixLengths:       true,
+			ComputeChecksums: true,
+		}
+	})
 	c := ce.c
-	output = input
-	consumed = false
 
-	ip4Layer := input.Layer(layers.LayerTypeIPv4)
-	if ip4Layer != nil {
-		log.Println("IPv4 message!")
-
-		ip4 := ip4Layer.(*layers.IPv4)
-
-		dests, err := c.router.RouteTo(ip4.DstIP.String())
-		if err != nil {
-			log.Println("Could not get destination(s) for NKN message!", err)
-			return
-		}
-
-		log.Println("Got destination(s):", dests)
-
-		_, err = c.client.Send(dests, input.LinkLayer().LayerPayload(), c.msgConf)
-		if err != nil {
-			log.Println("Failed to send NKN message!")
-			return
-		}
-
-		consumed = true
+	dests, err := c.router.RouteTo(input.DstIP.String())
+	if err != nil {
+		log.Println("Could not get destination(s) for NKN message!", err)
+		return errors.New("AAAAAAAAAAAHHHH")
 	}
 
-	return
+	log.Println("Got destination(s):", dests)
+
+	input.SerializeTo(ce.buf, ce.opts)
+	_, err = c.client.Send(dests, ce.buf.Bytes(), c.msgConf)
+	if err != nil {
+		log.Println("Failed to send NKN message!")
+		return errors.New("AAAAAAAAAAAHHHH")
+	}
+
+	return nil
 }
 
 func (c *NknClient) Send(dests *sdk.StringArray, payload []byte) error {

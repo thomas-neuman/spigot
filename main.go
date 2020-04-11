@@ -16,34 +16,84 @@ import (
 	. "github.com/thomas-neuman/spigot/arp"
 	"github.com/thomas-neuman/spigot/config"
 	"github.com/thomas-neuman/spigot/nkn"
-	. "github.com/thomas-neuman/spigot/packets"
+	_ "github.com/thomas-neuman/spigot/packets"
 	. "github.com/thomas-neuman/spigot/port"
 )
 
-func processingLoop(ctxt context.Context, src *gopacket.PacketSource, procs ...PacketProcessor) {
-	var p gopacket.Packet
+type SpigotDaemon struct {
+	ctxt      context.Context
+	port      *Port
+	arpResp   *ArpResponder
+	nknClient *nkn.NknClient
 
+	ingressInput chan []byte
+	egressInput  chan []byte
+}
+
+func NewSpigotDaemon(ctxt context.Context, conf *config.Configuration) *SpigotDaemon {
+	br0, err := NewPort(conf.IfaceName)
+	br0.SetUp(conf.IPAddress)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	arpResp := NewArpResponder(br0)
+
+	nknClient, err := nkn.NewNknClient(conf, br0, ctxt)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	daemon := &SpigotDaemon{
+		ctxt:      ctxt,
+		port:      br0,
+		arpResp:   arpResp,
+		nknClient: nknClient,
+	}
+	return daemon
+}
+
+func (d *SpigotDaemon) Start() {
+	go d.egressLoop()
+}
+
+func (d *SpigotDaemon) egressLoop() {
+	var eth layers.Ethernet
+	var arp layers.ARP
+	var ip4 layers.IPv4
+	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &arp, &ip4)
+	parser.IgnoreUnsupported = true
+	dec := []gopacket.LayerType{}
+
+	var b []byte
+	var err error
 	for {
 		select {
-		case p = <-src.Packets():
-			// log.Println("Got frame:", p)
-			go func(pkt gopacket.Packet) {
-				consumed := false
-
-				for _, proc := range procs {
-					pkt, consumed = proc.Process(pkt)
-					if consumed {
-						return
-					}
-					// log.Println("    --> Intermediate packet:", frame)
-				}
-
-				if !consumed {
-					log.Println("Frame was never consumed!")
-				}
-			}(p)
-		case <-ctxt.Done():
+		case <-d.ctxt.Done():
 			return
+		default:
+			b, _, err = d.port.Read()
+			if err != nil {
+				log.Println("Error reading packet data")
+				continue
+			}
+
+			err = parser.DecodeLayers(b, &dec)
+			if err != nil {
+				log.Println("Error decoding egress packet:", err)
+				continue
+			}
+
+			for _, lt := range dec {
+				switch lt {
+				case layers.LayerTypeEthernet:
+					continue
+				case layers.LayerTypeARP:
+					err = d.arpResp.Egress().Process(&arp)
+				case layers.LayerTypeIPv4:
+					d.nknClient.Egress().Process(&ip4)
+				}
+			}
 		}
 	}
 }
@@ -53,34 +103,12 @@ func main() {
 	ctxt, cancel := context.WithCancel(ctxt)
 	defer cancel()
 
-	config, err := config.GetConfiguration()
+	conf, err := config.GetConfiguration()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	br0, err := NewPort(config.IfaceName)
-	br0.SetUp(config.IPAddress)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// frameSrc := PacketSourceFromPort(br0, layers.LayerTypeEthernet)
-	// portSrc := br0.PacketSource(layers.LayerTypeEthernet)
-
-	arpResp := NewArpResponder(br0)
-
-	nknClient, err := nkn.NewNknClient(config, br0, ctxt)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	go processingLoop(ctxt,
-		br0.PacketSource(layers.LayerTypeEthernet),
-		arpResp.Egress(),
-		nknClient.Egress())
-	go processingLoop(ctxt,
-		nknClient.PacketSource(layers.LayerTypeIPv4),
-		br0.Ingress())
+	daemon := NewSpigotDaemon(ctxt, conf)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c,
@@ -88,6 +116,8 @@ func main() {
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
+
+	daemon.Start()
 
 	// Block until a signal is received.
 	s := <-c
