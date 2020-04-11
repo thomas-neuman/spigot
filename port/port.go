@@ -1,6 +1,7 @@
 package port
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/google/gopacket"
@@ -41,7 +42,12 @@ func (p *Port) DoRead() (data []gopacket.SerializableLayer, err error) {
 
 	pkt := gopacket.NewPacket(p.inbuf, p.FirstLayerType(), gopacket.DecodeOptions{})
 	for _, l := range pkt.Layers() {
-		data = append(data, l.(gopacket.SerializableLayer))
+		s, ok := l.(gopacket.SerializableLayer)
+		if !ok {
+			err = fmt.Errorf("Unusable layer! %v", l)
+			return
+		}
+		data = append(data, s)
 	}
 	return
 }

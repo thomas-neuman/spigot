@@ -3,6 +3,7 @@ package nkn
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"strings"
@@ -128,7 +129,12 @@ func (c *NknClient) DoRead() (data []gopacket.SerializableLayer, err error) {
 		},
 	}
 	for _, l := range pkt.Layers() {
-		data = append(data, l.(gopacket.SerializableLayer))
+		s, ok := l.(gopacket.SerializableLayer)
+		if !ok {
+			err = fmt.Errorf("Unusable layer! %v", l)
+			return
+		}
+		data = append(data, s)
 	}
 
 	return
