@@ -79,7 +79,7 @@ func main() {
 		arpResp.Egress(),
 		nknClient.Egress())
 	go processingLoop(ctxt,
-		nknClient.PacketSource(layers.LayerTypeEthernet),
+		nknClient.PacketSource(layers.LayerTypeIPv4),
 		br0.Ingress())
 
 	c := make(chan os.Signal, 1)

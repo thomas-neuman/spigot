@@ -91,9 +91,7 @@ func (src *nknClientPacketDataSource) ReadPacketData() (data []byte, ci gopacket
 		n := len(data)
 		ci.Length = n
 		ci.CaptureLength = n
-
-		pkt := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.DecodeOptions{})
-		err = src.c.snk.NextPacket(pkt)
+		err = nil
 		return
 	case <-done:
 		return

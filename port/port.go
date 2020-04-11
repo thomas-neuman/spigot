@@ -61,7 +61,8 @@ func (p *PortIngress) Process(input gopacket.Packet) (output gopacket.Packet, co
 		EthernetType: layers.EthernetTypeIPv4,
 	}
 
-	ip4 := gopacket.NewPacket(input.Layer(layers.LayerTypeEthernet).LayerPayload(), layers.LayerTypeIPv4, gopacket.DecodeOptions{})
+	// ip4 := gopacket.NewPacket(input.Layer(layers.LayerTypeEthernet).LayerPayload(), layers.LayerTypeIPv4, gopacket.DecodeOptions{})
+	ip4 := input
 	// eth.Payload = ip4.Data()
 
 	// ip4 := input.Layer(layers.LayerTypeIPv4).(*layers.IPv4)
