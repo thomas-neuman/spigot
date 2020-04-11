@@ -94,8 +94,6 @@ func (c *NknClient) Start() {
 func (c *NknClient) Read() (data []byte, n int, err error) {
 	select {
 	case msg := <-c.client.OnMessage.C:
-		log.Printf("Got message: %v", msg)
-
 		data = msg.Data
 		n = len(data)
 		err = nil
@@ -137,12 +135,9 @@ func (ce *nknClientEgress) Process(input *layers.IPv4) error {
 		return errors.New("AAAAAAAAAAAHHHH")
 	}
 
-	log.Println("Got destination(s):", dests)
-
 	input.SerializeTo(ce.buf, ce.opts)
 	gopacket.SerializeLayers(ce.buf, ce.opts, input, gopacket.Payload(input.LayerPayload()))
 
-	log.Println("Sending", ce.buf.Bytes())
 	_, err = c.client.Send(dests, ce.buf.Bytes(), c.msgConf)
 	if err != nil {
 		log.Println("Failed to send NKN message!")

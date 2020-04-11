@@ -60,7 +60,6 @@ func (p *PortIngress) Process(input *layers.IPv4) error {
 		gopacket.Payload(input.LayerPayload()))
 
 	pkt := gopacket.NewPacket(buf.Bytes(), layers.LayerTypeEthernet, gopacket.DecodeOptions{})
-	log.Println("Writing packet:", pkt, " (", buf, ")")
 	p.p.PacketSink(gopacket.SerializeOptions{}).NextPacket(pkt)
 
 	return nil
