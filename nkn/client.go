@@ -13,12 +13,13 @@ import (
 	. "github.com/thomas-neuman/spigot/config"
 )
 
-
 type NknClient struct {
-	account	*sdk.Account
-	client	*sdk.Client
-	router	*NknRouter
-	msgConf	*sdk.MessageConfig
+	account *sdk.Account
+	client  *sdk.Client
+	router  *NknRouter
+	msgConf *sdk.MessageConfig
+	outbuf  gopacket.SerializeBuffer
+	opts    gopacket.SerializeOptions
 }
 
 func NewNknClient(config *Configuration) (*NknClient, error) {
@@ -42,56 +43,70 @@ func NewNknClient(config *Configuration) (*NknClient, error) {
 		return nil, err
 	}
 
-	log.Println("Initialized NKN client", client.Address(), ", waiting to connect...")
-	<- client.OnConnect.C
-	log.Println("NKN client connected.")
-
 	rtr, err := NewNknRouter(config)
 	if err != nil {
 		return nil, err
 	}
 
 	conf := &sdk.MessageConfig{
-		NoReply:	true,
+		NoReply: true,
 	}
 
 	c := &NknClient{
-		account:	acc,
-		client:		client,
-		router: 	rtr,
-		msgConf:	conf,
+		account: acc,
+		client:  client,
+		router:  rtr,
+		msgConf: conf,
 	}
 
 	return c, nil
 }
 
-// Implement packets.PacketProcessor
-func (c *NknClient) Process(input gopacket.Packet) (output gopacket.Packet, consumed bool) {
-	output = input
-	consumed = false
+func (c *NknClient) FirstLayerType() gopacket.LayerType {
+	return layers.LayerTypeIPv4
+}
 
-	ip4Layer := input.Layer(layers.LayerTypeIPv4)
-	if ip4Layer != nil {
-		log.Println("IPv4 message!")
-
-		ip4 := ip4Layer.(*layers.IPv4)
-
-		dests, err := c.router.RouteTo(ip4.DstIP.String())
-		if err != nil {
-			log.Println("Could not get destination(s) for NKN message!", err)
-			return
-		}
-
-		log.Println("Got destination(s):", dests)
-
-		_, err = c.client.Send(dests, input.Data(), c.msgConf)
-		if err != nil {
-			log.Println("Failed to send NKN message!")
-			return
-		}
-
-		consumed = true
+func (c *NknClient) DoInit() error {
+	c.outbuf = gopacket.NewSerializeBuffer()
+	c.opts = gopacket.SerializeOptions{
+		ComputeChecksums: true,
+		FixLengths:       true,
 	}
 
+	log.Println("Waiting for client to connect...")
+	<-c.client.OnConnect.C
+	log.Println("Connected.")
+
+	return nil
+}
+
+func (c *NknClient) DoRead() (data []gopacket.SerializableLayer, err error) {
+	msg := <-c.client.OnMessage.C
+
+	pkt := gopacket.NewPacket(msg.Data, c.FirstLayerType(), gopacket.DecodeOptions{})
+
+	data = []gopacket.SerializableLayer{
+		&layers.Ethernet{
+			EthernetType: layers.EthernetTypeIPv4,
+		},
+	}
+	for _, l := range pkt.Layers() {
+		data = append(data, l.(gopacket.SerializableLayer))
+	}
+
+	return
+}
+
+func (c *NknClient) DoWrite(data []gopacket.SerializableLayer) (err error) {
+	ip4 := data[0].(*layers.IPv4)
+
+	dests, err := c.router.RouteTo(ip4.DstIP.String())
+	if err != nil {
+		log.Println("Could not get destination(s) for NKN message!", err)
+		return
+	}
+
+	gopacket.SerializeLayers(c.outbuf, c.opts, data...)
+	_, err = c.client.Send(dests, c.outbuf.Bytes(), c.msgConf)
 	return
 }

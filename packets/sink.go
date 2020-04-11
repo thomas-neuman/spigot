@@ -2,19 +2,30 @@ package packets
 
 import (
 	"github.com/google/gopacket"
-
-	. "github.com/thomas-neuman/spigot/port"
 )
-
 
 type PacketSink interface {
 	NextPacket(gopacket.Packet) error
 }
 
+type PacketDataSink interface {
+	WritePacketData(buf gopacket.SerializeBuffer) (n int, err error)
+}
+
+func NewPacketSink(snk PacketDataSink, opts gopacket.SerializeOptions) PacketSink {
+	buf := gopacket.NewSerializeBuffer()
+
+	return &packetSink{
+		buf:      buf,
+		opts:     opts,
+		dataSink: snk,
+	}
+}
+
 type packetSink struct {
-	buf			gopacket.SerializeBuffer
-	opts		gopacket.SerializeOptions
-	dataSink	*packetDataSink
+	buf      gopacket.SerializeBuffer
+	opts     gopacket.SerializeOptions
+	dataSink PacketDataSink
 }
 
 func (sink *packetSink) NextPacket(pkt gopacket.Packet) (err error) {
@@ -25,26 +36,4 @@ func (sink *packetSink) NextPacket(pkt gopacket.Packet) (err error) {
 
 	_, err = sink.dataSink.WritePacketData(sink.buf)
 	return
-}
-
-func PacketSinkFromPort(p *Port, opts gopacket.SerializeOptions) *packetSink {
-	buf := gopacket.NewSerializeBuffer()
-	dataSink := &packetDataSink{
-		port: p,
-	}
-
-	return &packetSink{
-		buf:		buf,
-		opts:		opts,
-		dataSink:	dataSink,
-	}
-}
-
-
-func (dataSink *packetDataSink) WritePacketData(buf gopacket.SerializeBuffer) (n int, err error) {
-	return dataSink.port.Write(buf.Bytes())
-}
-
-type packetDataSink struct {
-	port 	*Port
 }
