@@ -71,7 +71,7 @@ func (d *SpigotDaemon) ingressLoop() {
 				continue
 			}
 
-			d.port.Write(ls)
+			go d.port.Write(ls)
 		}
 	}
 }
@@ -91,34 +91,38 @@ func (d *SpigotDaemon) egressLoop() {
 				continue
 			}
 
-			for i, l := range ls {
-				switch l.LayerType() {
-				case d.port.FirstLayerType():
-					continue
-				case d.arpResp.FirstLayerType():
-					err = d.arpResp.Write(ls[i:])
-					if err != nil {
-						log.Println("Error writing ARP packet to ArpResponder:", err)
+			go func() {
+				for i, l := range ls {
+					switch l.LayerType() {
+					case d.port.FirstLayerType():
 						continue
-					}
+					case d.arpResp.FirstLayerType():
+						err = d.arpResp.Write(ls[i:])
+						if err != nil {
+							log.Println("Error writing ARP packet to ArpResponder:", err)
+							return
+						}
 
-					reply, err := d.arpResp.Read()
-					if err != nil {
-						log.Println("Error reading ARP packet from ArpResponder:", err)
-						continue
-					}
+						reply, err := d.arpResp.Read()
+						if err != nil {
+							log.Println("Error reading ARP packet from ArpResponder:", err)
+							return
+						}
 
-					err = d.port.Write(reply)
-					if err != nil {
-						log.Println("Error writing ARP back to port:", err)
-					}
-				case d.nknClient.FirstLayerType():
-					err = d.nknClient.Write(ls[i:])
-					if err != nil {
-						log.Println("Error writing packet to NknClient:", err)
+						err = d.port.Write(reply)
+						if err != nil {
+							log.Println("Error writing ARP back to port:", err)
+							return
+						}
+					case d.nknClient.FirstLayerType():
+						err = d.nknClient.Write(ls[i:])
+						if err != nil {
+							log.Println("Error writing packet to NknClient:", err)
+							return
+						}
 					}
 				}
-			}
+			}()
 		}
 	}
 }

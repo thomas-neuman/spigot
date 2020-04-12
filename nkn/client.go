@@ -2,6 +2,8 @@ package nkn
 
 import (
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	sdk "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn/util/address"
 
 	. "github.com/thomas-neuman/spigot/config"
 )
@@ -18,8 +21,11 @@ type NknClient struct {
 	client  *sdk.Client
 	router  *NknRouter
 	msgConf *sdk.MessageConfig
-	outbuf  gopacket.SerializeBuffer
-	opts    gopacket.SerializeOptions
+
+	authorizedKeys map[string]bool
+
+	outbuf gopacket.SerializeBuffer
+	opts   gopacket.SerializeOptions
 }
 
 func NewNknClient(config *Configuration) (*NknClient, error) {
@@ -52,11 +58,26 @@ func NewNknClient(config *Configuration) (*NknClient, error) {
 		NoReply: true,
 	}
 
+	keys := make(map[string]bool)
+	keys[string(acc.PubKey())] = true
+
+	for _, k := range config.AuthorizedKeys {
+		keys[k] = true
+	}
+	for _, r := range config.StaticRoutes {
+		_, pubkey, _, err := address.ParseClientAddress(r.Nexthop)
+		if err != nil {
+			log.Println("Error parsing nexthop address:", err)
+		}
+		keys[string(pubkey)] = true
+	}
+
 	c := &NknClient{
-		account: acc,
-		client:  client,
-		router:  rtr,
-		msgConf: conf,
+		account:        acc,
+		client:         client,
+		router:         rtr,
+		msgConf:        conf,
+		authorizedKeys: keys,
 	}
 
 	return c, nil
@@ -80,8 +101,25 @@ func (c *NknClient) DoInit() error {
 	return nil
 }
 
+func (c *NknClient) isMessageAuthorized(msg *sdk.Message) bool {
+	src := msg.Src
+	_, pubkey, _, err := address.ParseClientAddress(src)
+	if err != nil {
+		log.Println("Error parsing source address:", err)
+		return false
+	}
+
+	authorized, ok := c.authorizedKeys[string(pubkey)]
+	return (ok && authorized)
+}
+
 func (c *NknClient) DoRead() (data []gopacket.SerializableLayer, err error) {
 	msg := <-c.client.OnMessage.C
+
+	if !(c.isMessageAuthorized(msg)) {
+		err = errors.New("Message not authorized!")
+		return
+	}
 
 	pkt := gopacket.NewPacket(msg.Data, c.FirstLayerType(), gopacket.DecodeOptions{})
 
@@ -91,7 +129,12 @@ func (c *NknClient) DoRead() (data []gopacket.SerializableLayer, err error) {
 		},
 	}
 	for _, l := range pkt.Layers() {
-		data = append(data, l.(gopacket.SerializableLayer))
+		s, ok := l.(gopacket.SerializableLayer)
+		if !ok {
+			err = fmt.Errorf("Unusable layer! %v", l)
+			return
+		}
+		data = append(data, s)
 	}
 
 	return
