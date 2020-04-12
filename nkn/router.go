@@ -6,15 +6,15 @@ import (
 	"sync"
 
 	sdk "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn/util/address"
 
 	. "github.com/thomas-neuman/spigot/config"
 )
 
-
 type NknRouter struct {
-	lock		sync.Locker
-	ipToNknMap	map[string]string
-	nknToIpMap	map[string]string
+	lock       sync.Locker
+	ipToNknMap map[string]string
+	nknToIpMap map[string]string
 }
 
 func NewNknRouter(config *Configuration) (*NknRouter, error) {
@@ -43,6 +43,11 @@ func (r *NknRouter) AddRoute(ipAddr string, nknAddr string) error {
 		return fmt.Errorf("Cannot add route for invalid IP address %v", ipAddr)
 	}
 
+	_, _, _, err := address.ParseClientAddress(nknAddr)
+	if err != nil {
+		return fmt.Errorf("Error parsing nexthop address: %v", err)
+	}
+
 	r.ipToNknMap[ipAddr] = nknAddr
 	r.nknToIpMap[nknAddr] = ipAddr
 
@@ -56,6 +61,11 @@ func (r *NknRouter) RemoveRoute(ipAddr string, nknAddr string) error {
 	ip := net.ParseIP(ipAddr)
 	if ip == nil {
 		return fmt.Errorf("Cannot remove route for invalid IP address %v", ipAddr)
+	}
+
+	_, _, _, err := address.ParseClientAddress(nknAddr)
+	if err != nil {
+		return fmt.Errorf("Error parsing nexthop address: %v", err)
 	}
 
 	actual, ok := r.ipToNknMap[ipAddr]
