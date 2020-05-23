@@ -34,6 +34,11 @@ func (p *Port) SetUp() error {
 	}
 	log.Println("TAP address set.")
 
+	err = p.AdjustMTU(84)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
