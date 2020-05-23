@@ -27,10 +27,7 @@ func (p *Port) DoInit() error {
 	p.inbuf = make([]byte, 1500)
 
 	p.outbuf = gopacket.NewSerializeBuffer()
-	p.opts = gopacket.SerializeOptions{
-		ComputeChecksums: true,
-		FixLengths:       true,
-	}
+	p.opts = gopacket.SerializeOptions{}
 	return nil
 }
 
@@ -41,9 +38,11 @@ func (p *Port) DoRead() (data []gopacket.SerializableLayer, err error) {
 	}
 
 	pkt := gopacket.NewPacket(p.inbuf, p.FirstLayerType(), gopacket.DecodeOptions{})
+
 	for _, l := range pkt.Layers() {
 		s, ok := l.(gopacket.SerializableLayer)
 		if !ok {
+			log.Printf("Cannot read layer as SerializableLayer: %v", l)
 			err = fmt.Errorf("Unusable layer! %v", l)
 			return
 		}

@@ -89,10 +89,7 @@ func (c *NknClient) FirstLayerType() gopacket.LayerType {
 
 func (c *NknClient) DoInit() error {
 	c.outbuf = gopacket.NewSerializeBuffer()
-	c.opts = gopacket.SerializeOptions{
-		ComputeChecksums: true,
-		FixLengths:       true,
-	}
+	c.opts = gopacket.SerializeOptions{}
 
 	log.Println("Waiting for client to connect...")
 	<-c.client.OnConnect.C
@@ -131,6 +128,7 @@ func (c *NknClient) DoRead() (data []gopacket.SerializableLayer, err error) {
 	for _, l := range pkt.Layers() {
 		s, ok := l.(gopacket.SerializableLayer)
 		if !ok {
+			log.Printf("Cannot read layer as SerializableLayer: %v", l)
 			err = fmt.Errorf("Unusable layer! %v", l)
 			return
 		}
@@ -150,6 +148,7 @@ func (c *NknClient) DoWrite(data []gopacket.SerializableLayer) (err error) {
 	}
 
 	gopacket.SerializeLayers(c.outbuf, c.opts, data...)
+
 	_, err = c.client.Send(dests, c.outbuf.Bytes(), c.msgConf)
 	return
 }
