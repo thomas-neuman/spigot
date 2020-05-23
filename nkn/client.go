@@ -18,7 +18,7 @@ import (
 
 type NknClient struct {
 	account *sdk.Account
-	client  *sdk.Client
+	client  *sdk.MultiClient
 	router  *NknRouter
 	msgConf *sdk.MessageConfig
 
@@ -44,7 +44,7 @@ func NewNknClient(config *Configuration) (*NknClient, error) {
 		return nil, err
 	}
 
-	client, err := sdk.NewClient(acc, config.IPAddress, nil)
+	client, err := sdk.NewMultiClient(acc, config.IPAddress, 4, false, nil)
 	if err != nil {
 		return nil, err
 	}
