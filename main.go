@@ -128,6 +128,7 @@ func (d *SpigotDaemon) egressLoop() {
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.LUTC | log.Lshortfile)
 	ctxt := context.Background()
 	ctxt, cancel := context.WithCancel(ctxt)
 	defer cancel()
