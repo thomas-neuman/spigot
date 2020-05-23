@@ -1,0 +1,13 @@
+[Unit]
+Description=Spigot VPN Client
+After=network-online.target
+
+[Service]
+Type=simple
+
+ExecStart=/usr/bin/spigot
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
