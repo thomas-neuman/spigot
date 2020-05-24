@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/gopacket"
 
+	"github.com/thomas-neuman/spigot/api"
 	"github.com/thomas-neuman/spigot/arp"
 	"github.com/thomas-neuman/spigot/config"
 	"github.com/thomas-neuman/spigot/handler"
@@ -148,6 +149,9 @@ func main() {
 		syscall.SIGQUIT)
 
 	daemon.Start()
+
+	server := api.NewApiServer(ctxt, conf)
+	server.Start()
 
 	// Block until a signal is received.
 	s := <-c
