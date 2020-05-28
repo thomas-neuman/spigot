@@ -7,26 +7,28 @@ import (
 	"reflect"
 )
 
+const configPath = "/etc/spigot/config.json"
 
 type StaticRouteConfiguration struct {
-	Destination	string	`json:"destination"`
-	Nexthop		string	`json:"nexthop"`
+	Destination string `json:"destination"`
+	Nexthop     string `json:"nexthop"`
 }
 
 type Configuration struct {
-	IPAddress string 							`json:"ip_address" default:"10.0.0.1/24"`
-	IfaceName string 							`json:"interface_name" default:"spig0"`
-	PrivateSeedFile	string						`json:"private_seed_file" default:"/etc/spigot/secrets/seed"`
-	AuthorizedKeys	[]string					`json:"authorized_keys"`
-	StaticRoutes	[]StaticRouteConfiguration	`json:"static_routes"`
+	IPAddress       string                     `json:"ip_address" default:"10.0.0.1/24"`
+	IfaceName       string                     `json:"interface_name" default:"spig0"`
+	PrivateSeedFile string                     `json:"private_seed_file" default:"/etc/spigot/secrets/seed"`
+	AuthorizedKeys  []string                   `json:"authorized_keys"`
+	StaticRoutes    []StaticRouteConfiguration `json:"static_routes"`
+	APIAddress      string                     `json:"api_address" default:":8788"`
 }
 
-func getDefaultConfiguration() (*Configuration) {
+func getDefaultConfiguration() *Configuration {
 	cfg := &Configuration{}
 
 	t := reflect.TypeOf(cfg).Elem()
 	v := reflect.ValueOf(cfg).Elem()
-	for i := 0 ; i < t.NumField() ; i++ {
+	for i := 0; i < t.NumField(); i++ {
 		tF := t.Field(i)
 		def, ok := tF.Tag.Lookup("default")
 		if ok {
@@ -40,7 +42,7 @@ func getDefaultConfiguration() (*Configuration) {
 func GetConfiguration() (*Configuration, error) {
 	cfg := getDefaultConfiguration()
 
-	fd, err := os.Open("/etc/spigot/config.json")
+	fd, err := os.Open(configPath)
 	if err == nil {
 		b, err := ioutil.ReadAll(fd)
 		if err != nil {

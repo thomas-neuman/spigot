@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"log"
-	"path"
-	"runtime"
 	"time"
 
 	"github.com/fvbock/endless"
@@ -20,17 +18,23 @@ type ApiServer struct {
 }
 
 func NewApiServer(ctxt context.Context, conf *config.Configuration) *ApiServer {
+	r := gin.Default()
 	s := &ApiServer{
 		ctxt: ctxt,
 		conf: conf,
+		eng:  r,
 	}
 
-	r := gin.Default()
 	r.GET("/config", func(c *gin.Context) {
-		_, err := conf.Get("base")
-		if err != nil {
-			c.JSON(500, gin.H{})
-		}
+		c.JSON(200, gin.H{
+			"data": s.conf,
+		})
+	})
+	r.PUT("/config", func(c *gin.Context) {
+		c.JSON(501, gin.H{})
+	})
+
+	r.GET("/routes", func(c *gin.Context) {
 		c.JSON(200, gin.H{})
 	})
 
@@ -39,7 +43,7 @@ func NewApiServer(ctxt context.Context, conf *config.Configuration) *ApiServer {
 
 func (s *ApiServer) Start() {
 	go func() {
-		server := endless.NewServer(":8788", s.eng)
+		server := endless.NewServer(s.conf.APIAddress, s.eng)
 
 		go func() {
 			err := server.ListenAndServe()

@@ -140,6 +140,7 @@ func main() {
 	}
 
 	daemon := NewSpigotDaemon(ctxt, conf)
+	server := api.NewApiServer(ctxt, conf)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c,
@@ -149,8 +150,6 @@ func main() {
 		syscall.SIGQUIT)
 
 	daemon.Start()
-
-	server := api.NewApiServer(ctxt, conf)
 	server.Start()
 
 	// Block until a signal is received.
